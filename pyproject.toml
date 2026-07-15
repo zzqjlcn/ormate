@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ormate"
+version = "0.1.0"
+description = "Async repositories with separate read/write models and pluggable storage adapters"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "zhangzhanqi" }]
+keywords = ["sqlalchemy", "elasticsearch", "asyncio", "repository", "sqlmodel", "database"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: AsyncIO",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = ["sqlalchemy>=2.0.36,<3"]
+
+[project.optional-dependencies]
+sqlite = ["aiosqlite>=0.20"]
+postgresql = ["asyncpg>=0.30", "psycopg[binary]>=3.2"]
+mysql = ["aiomysql>=0.2", "pymysql>=1.1"]
+sqlmodel = ["sqlmodel>=0.0.22"]
+elasticsearch = ["elasticsearch[async]>=8.17,<10", "pydantic>=2.10"]
+web = ["starlette>=0.41"]
+dev = [
+  "aiosqlite>=0.20",
+  "build>=1.2",
+  "elasticsearch[async]>=8.17,<10",
+  "httpx>=0.28",
+  "mypy>=1.13",
+  "pydantic>=2.10",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.8",
+  "sqlmodel>=0.0.22",
+  "starlette>=0.41",
+  "twine>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ormate"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["ormate"]
