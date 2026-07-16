@@ -29,13 +29,12 @@ async def main() -> None:
 
     notes = ModelRepository(SQLAlchemyAdapter(db), Note, NoteRead)
     async with db:
-        await notes.create_item({"id": 1, "text": "first"})
-        await notes.create_item({"id": 2, "text": "second"})
+        await notes.add({"id": 1, "text": "first"})
+        await notes.add({"id": 2, "text": "second"})
 
-    print(await notes.read_items())
+    print(await notes.find())
     await db.dispose()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

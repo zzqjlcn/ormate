@@ -39,7 +39,7 @@ async def main() -> None:
         await initialize_index(client)
 
         # Create：指定 id 可重复运行；不指定时由 Elasticsearch 生成。
-        created = await articles.create_item(
+        created = await articles.add(
             {
                 "id": "ormate-quickstart",
                 "title": "Ormate quickstart",
@@ -50,17 +50,17 @@ async def main() -> None:
         print("created:", created)
 
         # Read：按主键读取，以及使用 Elasticsearch Query DSL 条件查询。
-        article = await articles.read_item_by_primary_key("ormate-quickstart")
+        article = await articles.get("ormate-quickstart")
         print("read by id:", article)
 
-        matched = await articles.read_items(
+        matched = await articles.find(
             {"match": {"content": "storage adapters"}},
             limit=10,
         )
         print("matched:", matched)
 
         # Update：部分更新，不会覆盖未提供字段。
-        updated = await articles.update_item_by_primary_key(
+        updated = await articles.update_by_id(
             "ormate-quickstart",
             {"title": "Ormate Elasticsearch quickstart"},
         )
@@ -77,9 +77,9 @@ async def main() -> None:
         print("aggregation:", aggregation.get("aggregations", {}))
 
         # Delete：返回删除前的文档；再次读取得到 None。
-        deleted = await articles.delete_item_by_primary_key("ormate-quickstart")
+        deleted = await articles.remove_by_id("ormate-quickstart")
         print("deleted:", deleted)
-        print("after delete:", await articles.read_item_by_primary_key("ormate-quickstart"))
+        print("after delete:", await articles.get("ormate-quickstart"))
     finally:
         await client.close()
 

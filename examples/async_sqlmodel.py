@@ -25,10 +25,10 @@ async def main() -> None:
     notes = ModelRepository(adapter, Note, NoteRead)
 
     async with db:
-        await notes.create_item({"text": "first"})
-        await notes.create_item({"text": "second"})
+        await notes.add({"text": "first"})
+        await notes.add({"text": "second"})
 
-    print(await notes.read_items())
+    print(await notes.find())
     await db.dispose()
 
 

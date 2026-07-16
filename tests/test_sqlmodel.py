@@ -1,6 +1,6 @@
 from sqlmodel import Field, SQLModel
 
-from ormate import ModelRepository, SQLAlchemyAdapter, SQLModelAdapter
+from ormate import ModelRepository, SQLAlchemyAdapter, SQLModelAdapter, eq
 from tests.models import User
 
 
@@ -25,9 +25,10 @@ async def test_sqlmodel_table_uses_unified_repository(async_db):
         await connection.run_sync(SQLModel.metadata.create_all)
     repository = ModelRepository(SQLModelAdapter(async_db), Item, ItemRead)
     assert repository.storage_name == "items"
-    created = await repository.create_item({"name": "SQLModel"})
+    created = await repository.add({"name": "SQLModel"})
     assert created.name == "SQLModel"
-    assert (await repository.read_item_by_primary_key(created.id)).name == "SQLModel"
+    assert (await repository.get(created.id)).name == "SQLModel"
+    assert (await repository.find(eq("name", "SQLModel")))[0].id == created.id
 
 
 async def test_sqlmodel_and_sqlalchemy_share_one_transaction(async_db, async_adapter):
@@ -38,8 +39,8 @@ async def test_sqlmodel_and_sqlalchemy_share_one_transaction(async_db, async_ada
 
     try:
         async with async_db:
-            await items.create_item({"name": "SQLModel"})
-            await users.create_item({"id": 1, "name": "SQLAlchemy", "secret": "x"})
+            await items.add({"name": "SQLModel"})
+            await users.add({"id": 1, "name": "SQLAlchemy", "secret": "x"})
             raise RuntimeError("rollback both")
     except RuntimeError:
         pass

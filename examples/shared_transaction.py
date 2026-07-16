@@ -33,8 +33,8 @@ async def main() -> None:
 
     # 两种表模型共享同一个 AsyncSession：全部成功时一起提交，任一异常时全部回滚。
     async with db:
-        await tasks.create_item({"title": "publish package"})
-        await audit_logs.create_item({"id": 1, "message": "task created"})
+        await tasks.add({"title": "publish package"})
+        await audit_logs.add({"id": 1, "message": "task created"})
 
     await db.dispose()
 

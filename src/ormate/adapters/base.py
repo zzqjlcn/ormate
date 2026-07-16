@@ -1,6 +1,8 @@
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, runtime_checkable
 
+from ormate.projection import ReadField
+
 
 @runtime_checkable
 class StorageAdapter(Protocol):
@@ -8,9 +10,9 @@ class StorageAdapter(Protocol):
 
     def storage_name(self, model: type[Any]) -> str: ...
 
-    async def create(self, model: type[Any], items: Sequence[Mapping[str, Any]]) -> list[Any]: ...
+    async def add(self, model: type[Any], items: Sequence[Mapping[str, Any]]) -> list[Any]: ...
 
-    async def read(
+    async def find(
         self,
         model: type[Any],
         query: Any = None,
@@ -18,11 +20,12 @@ class StorageAdapter(Protocol):
         limit: int | None = None,
         offset: int | None = None,
         statement: Any = None,
+        projection: Sequence[ReadField] | None = None,
     ) -> list[Any]: ...
 
     async def update(self, model: type[Any], query: Any, values: Mapping[str, Any]) -> list[Any]: ...
 
-    async def delete(self, model: type[Any], query: Any) -> list[Any]: ...
+    async def remove(self, model: type[Any], query: Any) -> list[Any]: ...
 
     async def count(self, model: type[Any], query: Any = None, *, statement: Any = None) -> int: ...
 

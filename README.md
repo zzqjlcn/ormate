@@ -59,10 +59,10 @@ repository = ModelRepository(SQLAlchemyAdapter(db), User, UserRead)
 async with db.engine.begin() as connection:
     await connection.run_sync(Base.metadata.create_all)
 
-created = await repository.create_item(UserCreate(id=1, name="Ada"))
-loaded = await repository.read_item_by_primary_key(1)
-updated = await repository.update_item_by_primary_key(1, {"name": "Grace"})
-deleted = await repository.delete_item_by_primary_key(1)
+created = await repository.add(UserCreate(id=1, name="Ada"))
+loaded = await repository.get(1)
+updated = await repository.update_by_id(1, {"name": "Grace"})
+deleted = await repository.remove_by_id(1)
 ```
 
 Create 和 Update 参数可以是字典，也可以是实现了 `model_dump(exclude_unset=True)` 的 Pydantic/SQLModel 对象。传入 ReadModel 时，该模型需要提供 `model_validate()`；不传则返回存储模型。
@@ -70,9 +70,68 @@ Create 和 Update 参数可以是字典，也可以是实现了 `model_dump(excl
 SQLAlchemy 条件查询直接使用 SQLAlchemy 表达式：
 
 ```python
-users = await repository.read_items(User.name.contains("Ada"), limit=20)
+users = await repository.find(User.name.contains("Ada"), limit=20)
 total = await repository.count(User.name.contains("Ada"))
 ```
+
+SQLAlchemy、SQLModel 和 Elasticsearch 也可以共享结构化过滤 DSL：
+
+```python
+from ormate import and_, eq, gte, in_, not_, or_
+
+query = and_(
+    eq(Product.status, "published"),
+    gte(Product.created_at, start_time),
+    or_(in_(Product.category, ["guide", "reference"]), not_(eq(Product.hidden, True))),
+)
+items = await repository.find(query)
+```
+
+DSL 字段可以写成底层存储字段名或 SQLAlchemy/SQLModel 映射字段，例如 `eq("active", True)` 和 `eq(Product.active, True)` 等价。映射字段会在构造表达式时归一化为其存储字段名，因此 DSL AST 不持有 SQLAlchemy 对象。它提供 `eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`in_`、`not_in`、`and_`、`or_` 和 `not_`。SQL JOIN、ES 全文评分、nested、geo 和聚合等能力仍使用后端原生查询。
+
+DSL 可以复用于所有接受查询条件的 Repository 方法：
+
+```python
+# 查询与统计
+books = await repository.find(and_(eq("active", True), in_("category", ["book", "guide"])))
+total = await repository.count(gte("price", 100))
+available = await repository.exists(not_(eq("status", "deleted")))
+
+# 条件更新与删除
+updated = await repository.update(eq("status", "draft"), {"status": "review"})
+removed = await repository.remove(and_(eq("active", False), lt("updated_at", expire_at)))
+
+# 空集合具有固定语义
+await repository.find(in_("id", []))       # 恒假，返回空列表
+await repository.find(not_in("id", []))   # 恒真，返回全部
+```
+
+`and_()` 恒真，`or_()` 恒假；相同类型的嵌套组合会自动展平。`and_`、`or_`、`not_` 只接受 ormate DSL 节点，不能在节点内部混入 SQLAlchemy 表达式或 ES 字典。需要后端特有能力时，将完整原生查询直接传给 Repository。
+
+完整可运行示例：
+
+```bash
+uv run python examples/query_dsl.py
+```
+
+## ReadModel 字段投影
+
+配置 ReadModel 后，普通读取只查询 ReadModel 验证所需的字段。`validation_alias` 用于推断存储字段，`serialization_alias` 只控制向外序列化：
+
+```python
+from pydantic import BaseModel, Field
+
+
+class UserRead(BaseModel):
+    display_name: str = Field(
+        validation_alias="name",
+        serialization_alias="displayName",
+    )
+```
+
+这个模型从底层读取 `name`，执行 `model_dump(by_alias=True)` 时输出 `displayName`。普通 `alias` 同时用于验证和序列化；只有 `serialization_alias` 时仍按模型字段名读取。纯字符串 `AliasChoices` 会选择第一个存在的存储字段，`AliasPath` 因 SQL 与 ES 路径语义不同而不支持自动投影。
+
+自动投影应用于 `find`、`find_one`、`get` 和 `get_many`。创建、更新、删除以及未配置 ReadModel 的查询仍读取完整存储对象。
 
 ## SQLModel 与事务
 
@@ -83,8 +142,8 @@ audit_logs = ModelRepository(SQLAlchemyAdapter(db), AuditLog)
 tasks = ModelRepository(SQLModelAdapter(db), Task)
 
 async with db:
-    await audit_logs.create_item({"id": 1, "message": "task created"})
-    await tasks.create_item({"title": "publish package"})
+    await audit_logs.add({"id": 1, "message": "task created"})
+    await tasks.add({"title": "publish package"})
 ```
 
 作用域正常退出时提交，发生异常时回滚。同步代码可以使用 `Database` 和 `with db:`。
@@ -115,12 +174,12 @@ class ArticleDocument(ElasticsearchDocument):
 adapter = ElasticsearchAdapter(client, refresh="wait_for")
 articles = ModelRepository(adapter, ArticleDocument)
 
-created = await articles.create_item(
+created = await articles.add(
     {"id": "quickstart", "title": "ormate", "content": "pluggable adapters"}
 )
-matched = await articles.read_items({"match": {"content": "adapters"}}, limit=10)
-updated = await articles.update_item_by_primary_key("quickstart", {"title": "ormate 0.1"})
-deleted = await articles.delete_item_by_primary_key("quickstart")
+matched = await articles.find({"match": {"content": "adapters"}}, limit=10)
+updated = await articles.update_by_id("quickstart", {"title": "ormate 0.1"})
+deleted = await articles.remove_by_id("quickstart")
 ```
 
 完整的索引初始化、CRUD、计数、聚合和客户端关闭示例在 `examples/elasticsearch.py`：
@@ -135,9 +194,10 @@ ELASTICSEARCH_URL=http://localhost:9200 uv run python examples/elasticsearch.py
 
 `ModelRepository` 提供以下通用操作：
 
-- 单项和批量创建
-- 条件查询、主键查询和批量主键查询
-- 条件更新和删除
+- `add`、`add_many`
+- `find`、`find_one`、`get`、`get_many`
+- `update`、`update_by_id`、`update_many`
+- `remove`、`remove_by_id`、`remove_many`
 - `count`、`exists`、`limit`、`offset`
 - 后端原生命令执行
 
@@ -208,4 +268,3 @@ uv run twine check dist/*
 ## License
 
 [MIT License](LICENSE)
-
