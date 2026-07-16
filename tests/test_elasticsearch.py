@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from elasticsearch.helpers import BulkIndexError
 from pydantic import BaseModel, Field
 
 from ormate import ModelRepository, and_, eq, gt, not_, or_
@@ -29,6 +30,15 @@ class FakeElasticsearch:
     def __init__(self) -> None:
         self.documents: dict[str, dict[str, Any]] = {}
         self.last_source_includes = None
+        self.bulk_calls = 0
+        self.bulk_options = None
+        self.bulk_fail_ids: set[str] = set()
+        self.refresh_calls = 0
+        self.indices = self
+
+    async def refresh(self, **kwargs):
+        self.refresh_calls += 1
+        return {"_shards": {"successful": 1}}
 
     async def index(self, *, id=None, document, **kwargs):
         document_id = str(id or len(self.documents) + 1)
@@ -102,6 +112,23 @@ class FakeElasticsearch:
         return True
 
 
+async def fake_async_streaming_bulk(client, actions, **kwargs):
+    client.bulk_calls += 1
+    client.bulk_options = kwargs
+    for action in actions:
+        document_id = str(action.get("_id") or len(client.documents) + 1)
+        if document_id in client.bulk_fail_ids:
+            yield False, {"index": {"_id": document_id, "status": 400, "error": {"type": "test_error"}}}
+            continue
+        client.documents[document_id] = dict(action["_source"])
+        yield True, {"index": {"_id": document_id, "status": 201}}
+
+
+@pytest.fixture(autouse=True)
+def patch_async_streaming_bulk(monkeypatch):
+    monkeypatch.setattr("ormate.adapters.elasticsearch.async_streaming_bulk", fake_async_streaming_bulk)
+
+
 async def test_elasticsearch_adapter_uses_same_repository_api():
     adapter = ElasticsearchAdapter(FakeElasticsearch())
     repository = ModelRepository(adapter, KnowledgeDocument, KnowledgeRead)
@@ -120,6 +147,75 @@ async def test_elasticsearch_adapter_uses_same_repository_api():
     deleted = await repository.remove_by_id("1")
     assert deleted.id == "1"
     assert await repository.count() == 0
+
+
+async def test_elasticsearch_add_many_uses_async_bulk_with_chunking_retry_and_one_refresh():
+    client = FakeElasticsearch()
+    adapter = ElasticsearchAdapter(
+        client,
+        refresh="wait_for",
+        bulk_chunk_size=2,
+        bulk_max_chunk_bytes=1024,
+        bulk_max_retries=4,
+        bulk_initial_backoff=0.5,
+        bulk_max_backoff=5,
+    )
+    repository = ModelRepository(adapter, KnowledgeDocument, KnowledgeRead)
+
+    created = await repository.add_many(
+        [
+            {"id": "a", "title": "A", "content": "one"},
+            {"title": "B", "content": "two"},
+            {"id": "c", "title": "C", "content": "three"},
+        ]
+    )
+
+    assert [document.id for document in created] == ["a", "2", "c"]
+    assert client.bulk_calls == 1
+    assert client.bulk_options == {
+        "chunk_size": 2,
+        "max_chunk_bytes": 1024,
+        "max_retries": 4,
+        "initial_backoff": 0.5,
+        "max_backoff": 5,
+        "raise_on_error": False,
+        "raise_on_exception": True,
+        "yield_ok": True,
+    }
+    assert client.refresh_calls == 1
+
+
+async def test_elasticsearch_bulk_collects_item_failures():
+    client = FakeElasticsearch()
+    client.bulk_fail_ids.add("bad")
+    repository = ModelRepository(ElasticsearchAdapter(client), KnowledgeDocument, KnowledgeRead)
+
+    with pytest.raises(BulkIndexError, match="1 document.*failed") as exc_info:
+        await repository.add_many(
+            [
+                {"id": "ok", "title": "OK", "content": "created"},
+                {"id": "bad", "title": "Bad", "content": "rejected"},
+            ]
+        )
+
+    assert exc_info.value.errors[0]["index"]["_id"] == "bad"
+    assert "ok" in client.documents
+    assert "bad" not in client.documents
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"bulk_chunk_size": 0}, "bulk_chunk_size"),
+        ({"bulk_max_chunk_bytes": 0}, "bulk_max_chunk_bytes"),
+        ({"bulk_max_retries": -1}, "bulk_max_retries"),
+        ({"bulk_initial_backoff": -1}, "bulk_initial_backoff"),
+        ({"bulk_initial_backoff": 2, "bulk_max_backoff": 1}, "bulk_max_backoff"),
+    ],
+)
+def test_elasticsearch_bulk_options_are_validated(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        ElasticsearchAdapter(FakeElasticsearch(), **kwargs)
 
 
 async def test_elasticsearch_projection_aliases_and_structured_query():

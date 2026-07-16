@@ -1,5 +1,7 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
+
+from elasticsearch.helpers import BulkIndexError, async_streaming_bulk
 
 from ormate.projection import ReadField
 from ormate.query import BooleanExpression, Comparison, Constant, NotExpression, QueryExpression, SetComparison
@@ -8,12 +10,38 @@ from ormate.query import BooleanExpression, Comparison, Constant, NotExpression,
 class ElasticsearchAdapter:
     """Async Elasticsearch adapter using native Query DSL dictionaries."""
 
-    def __init__(self, client: Any, *, refresh: bool | str = False, default_size: int = 1000) -> None:
+    def __init__(
+        self,
+        client: Any,
+        *,
+        refresh: bool | str = False,
+        default_size: int = 1000,
+        bulk_chunk_size: int = 500,
+        bulk_max_chunk_bytes: int = 100 * 1024 * 1024,
+        bulk_max_retries: int = 3,
+        bulk_initial_backoff: float = 1,
+        bulk_max_backoff: float = 60,
+    ) -> None:
         if default_size < 1:
             raise ValueError("default_size must be greater than zero")
+        if bulk_chunk_size < 1:
+            raise ValueError("bulk_chunk_size must be greater than zero")
+        if bulk_max_chunk_bytes < 1:
+            raise ValueError("bulk_max_chunk_bytes must be greater than zero")
+        if bulk_max_retries < 0:
+            raise ValueError("bulk_max_retries cannot be negative")
+        if bulk_initial_backoff < 0:
+            raise ValueError("bulk_initial_backoff cannot be negative")
+        if bulk_max_backoff < bulk_initial_backoff:
+            raise ValueError("bulk_max_backoff cannot be less than bulk_initial_backoff")
         self.client = client
         self.refresh = refresh
         self.default_size = default_size
+        self.bulk_chunk_size = bulk_chunk_size
+        self.bulk_max_chunk_bytes = bulk_max_chunk_bytes
+        self.bulk_max_retries = bulk_max_retries
+        self.bulk_initial_backoff = bulk_initial_backoff
+        self.bulk_max_backoff = bulk_max_backoff
 
     def storage_name(self, model: type[Any]) -> str:
         index_name = getattr(model, "index_name", None)
@@ -96,18 +124,49 @@ class ElasticsearchAdapter:
 
     async def add(self, model: type[Any], items: Sequence[Mapping[str, Any]]) -> list[Any]:
         index_name = self.storage_name(model)
-        results = []
-        for values in items:
-            document = self._document(model, values)
-            response = await self.client.index(
-                index=index_name,
-                id=getattr(document, "id", None),
-                document=self._source(document),
-                refresh=self.refresh,
-            )
-            result_values = {"id": response.get("_id"), **self._source(document)}
-            results.append(self._document(model, result_values))
-        return results
+        documents = [self._document(model, values) for values in items]
+
+        def actions() -> Iterator[dict[str, Any]]:
+            for document in documents:
+                action: dict[str, Any] = {
+                    "_op_type": "index",
+                    "_index": index_name,
+                    "_source": self._source(document),
+                }
+                document_id = getattr(document, "id", None)
+                if document_id is not None:
+                    action["_id"] = str(document_id)
+                yield action
+
+        result_ids: list[str | None] = []
+        errors: list[dict[str, Any]] = []
+        async for success, item in async_streaming_bulk(
+            self.client,
+            actions(),
+            chunk_size=self.bulk_chunk_size,
+            max_chunk_bytes=self.bulk_max_chunk_bytes,
+            max_retries=self.bulk_max_retries,
+            initial_backoff=self.bulk_initial_backoff,
+            max_backoff=self.bulk_max_backoff,
+            raise_on_error=False,
+            raise_on_exception=True,
+            yield_ok=True,
+        ):
+            operation = next(iter(item.values()))
+            if success:
+                result_ids.append(operation.get("_id"))
+            else:
+                errors.append(item)
+
+        if self.refresh:
+            await self.client.indices.refresh(index=index_name)
+        if errors:
+            raise BulkIndexError(f"{len(errors)} document(s) failed to index", errors)
+
+        return [
+            self._document(model, {"id": document_id, **self._source(document)})
+            for document_id, document in zip(result_ids, documents, strict=True)
+        ]
 
     async def find(
         self,

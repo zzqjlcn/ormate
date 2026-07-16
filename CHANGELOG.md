@@ -8,6 +8,7 @@
 - 提供直接继承 `SQLAlchemyAdapter` 的 `SQLModelAdapter` 语义入口，不干预业务模型的基础字段定义。
 - 通过 Adapter 的 `storage_name()` 统一解析 SQL 表名与 Elasticsearch 索引名。
 - 提供可选 `ElasticsearchAdapter` 与 `ElasticsearchDocument`，支持原生 Query DSL、全文检索入口和聚合。
+- Elasticsearch 写入使用异步 streaming bulk，支持分块、大小限制、429 指数退避重试和批次后 refresh。
 - 支持独立 Create、Update、Read 模型、批量主键操作、复合主键、计数和存在性检查。
 - Repository 使用 `add`、`find`、`get`、`update`、`remove` 等仓储语义 API。
 - ReadModel 普通读取按字段和 `validation_alias` 自动投影，并区分 `serialization_alias`。

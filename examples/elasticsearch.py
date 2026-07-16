@@ -32,20 +32,28 @@ async def initialize_index(client: AsyncElasticsearch) -> None:
 
 async def main() -> None:
     client = AsyncElasticsearch(os.getenv("ELASTICSEARCH_URL", "http://localhost:9200"))
-    adapter = ElasticsearchAdapter(client, refresh="wait_for")
+    adapter = ElasticsearchAdapter(client, refresh="wait_for", bulk_chunk_size=500, bulk_max_retries=3)
     articles = ModelRepository(adapter, ArticleDocument)
 
     try:
         await initialize_index(client)
 
-        # Create：指定 id 可重复运行；不指定时由 Elasticsearch 生成。
-        created = await articles.add(
-            {
-                "id": "ormate-quickstart",
-                "title": "Ormate quickstart",
-                "content": "Use one repository API with pluggable storage adapters.",
-                "category": "python",
-            }
+        # Create：add/add_many 都使用异步 Bulk；不指定 id 时由 Elasticsearch 生成。
+        created = await articles.add_many(
+            [
+                {
+                    "id": "ormate-quickstart",
+                    "title": "Ormate quickstart",
+                    "content": "Use one repository API with pluggable storage adapters.",
+                    "category": "python",
+                },
+                {
+                    "id": "ormate-bulk",
+                    "title": "Ormate async bulk",
+                    "content": "Index documents in chunks with retry support.",
+                    "category": "python",
+                },
+            ]
         )
         print("created:", created)
 
@@ -77,7 +85,7 @@ async def main() -> None:
         print("aggregation:", aggregation.get("aggregations", {}))
 
         # Delete：返回删除前的文档；再次读取得到 None。
-        deleted = await articles.remove_by_id("ormate-quickstart")
+        deleted = await articles.remove_many(["ormate-quickstart", "ormate-bulk"])
         print("deleted:", deleted)
         print("after delete:", await articles.get("ormate-quickstart"))
     finally:

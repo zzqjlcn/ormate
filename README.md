@@ -171,16 +171,34 @@ class ArticleDocument(ElasticsearchDocument):
     content: str
 
 
-adapter = ElasticsearchAdapter(client, refresh="wait_for")
+adapter = ElasticsearchAdapter(
+    client,
+    refresh="wait_for",
+    bulk_chunk_size=500,
+    bulk_max_retries=3,
+)
 articles = ModelRepository(adapter, ArticleDocument)
 
-created = await articles.add(
-    {"id": "quickstart", "title": "ormate", "content": "pluggable adapters"}
+created = await articles.add_many(
+    [
+        {"id": "quickstart", "title": "ormate", "content": "pluggable adapters"},
+        {"title": "bulk", "content": "async bulk indexing"},
+    ]
 )
 matched = await articles.find({"match": {"content": "adapters"}}, limit=10)
 updated = await articles.update_by_id("quickstart", {"title": "ormate 0.1"})
 deleted = await articles.remove_by_id("quickstart")
 ```
+
+`add()` 和 `add_many()` 都通过官方异步 `async_streaming_bulk` 写入。默认每个 chunk 最多 500 条、100 MiB，对 HTTP 429 最多重试 3 次并使用异步指数退避。可通过以下 Adapter 参数调整：
+
+- `bulk_chunk_size`
+- `bulk_max_chunk_bytes`
+- `bulk_max_retries`
+- `bulk_initial_backoff`
+- `bulk_max_backoff`
+
+设置 `refresh=True` 或 `refresh="wait_for"` 时，所有 chunk 完成后只 refresh 一次。单条文档失败时，其余成功项不会回滚，方法会在处理完整批次后抛出 Elasticsearch 官方 `BulkIndexError`，错误明细位于异常的 `errors` 属性。
 
 完整的索引初始化、CRUD、计数、聚合和客户端关闭示例在 `examples/elasticsearch.py`：
 
@@ -237,14 +255,14 @@ app.add_middleware(
 
 - PostgreSQL、MySQL 和真实 Elasticsearch 集群尚未加入自动化集成测试。
 - Elasticsearch 条件批量更新和删除受 `default_size` 限制，默认最多处理 1000 个匹配文档。
-- ES mapping 迁移、bulk、PIT/search_after 和乐观并发控制尚未实现。
+- ES mapping 迁移、PIT/search_after 和乐观并发控制尚未实现。
 - 不提供 SQL 与 Elasticsearch 之间的分布式事务。
 
 ## 路线图
 
 `0.1.x` 用于完成首次 PyPI 发布，当前还需要经过 TestPyPI 安装验证。
 
-`0.2` 主要完善 Elasticsearch：bulk 写入、PIT/search_after、索引 mapping 管理、并发冲突处理和真实集群测试。
+`0.2` 主要完善 Elasticsearch：PIT/search_after、索引 mapping 管理、并发冲突处理和真实集群测试。
 
 `0.3` 主要完善关系型数据库：PostgreSQL/MySQL 测试矩阵、分页结果类型、显式 savepoint API 和批量性能优化。
 

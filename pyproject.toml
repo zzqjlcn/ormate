@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ormate"
-version = "0.1.1a1"
+version = "0.1.1"
 description = "Async repositories with separate read/write models and pluggable storage adapters"
 readme = "README.md"
 requires-python = ">=3.13"
