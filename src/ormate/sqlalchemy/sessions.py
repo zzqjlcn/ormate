@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 
 class SessionScope:
-    def __init__(self, db: Any, scope: Any = None) -> None:
+    def __init__(self, db: Any, scope: Any = None, *, reuse_current: bool = True) -> None:
         self.db = db
-        self.scope = scope if scope is not None else object()
+        self.scope = scope
+        self.reuse_current = reuse_current
         self.token: Token[Any] | None = None
         self.session: Session | None = None
         self.owned = False
@@ -20,7 +21,7 @@ class SessionScope:
         current = self.db._session_context.get()
         if isinstance(self.scope, Session):
             self.session = self.scope
-        elif current is not None:
+        elif self.reuse_current and current is not None:
             self.session = current
         else:
             self.session = self.db.session_maker()
@@ -50,9 +51,10 @@ class SessionScope:
 
 
 class AsyncSessionScope:
-    def __init__(self, db: Any, scope: Any = None) -> None:
+    def __init__(self, db: Any, scope: Any = None, *, reuse_current: bool = True) -> None:
         self.db = db
-        self.scope = scope if scope is not None else object()
+        self.scope = scope
+        self.reuse_current = reuse_current
         self.token: Token[Any] | None = None
         self.session: AsyncSession | None = None
         self.owned = False
@@ -61,7 +63,7 @@ class AsyncSessionScope:
         current = self.db._session_context.get()
         if isinstance(self.scope, AsyncSession):
             self.session = self.scope
-        elif current is not None:
+        elif self.reuse_current and current is not None:
             self.session = current
         else:
             self.session = self.db.session_maker()

@@ -58,8 +58,21 @@ class Database:
         finally:
             self._scope_stack.set(stack[:-1])
 
-    def session_scope(self, scope: Any = None) -> SessionScope:
-        return SessionScope(self, scope)
+    def session_scope(self, scope: Any = None, *, reuse_current: bool = True) -> SessionScope:
+        return SessionScope(self, scope, reuse_current=reuse_current)
+
+    def new_session(self) -> SessionScope:
+        """Create an independently managed session for a short transaction."""
+        return self.session_scope(reuse_current=False)
+
+    @contextmanager
+    def detached(self) -> Iterator[None]:
+        """Temporarily hide the current session without managing its lifecycle."""
+        token = self._session_context.set(None)
+        try:
+            yield
+        finally:
+            self._session_context.reset(token)
 
     @contextmanager
     def session_generator(self) -> Iterator[Session]:
@@ -131,8 +144,21 @@ class AsyncDatabase:
         finally:
             self._scope_stack.set(stack[:-1])
 
-    def session_scope(self, scope: Any = None) -> AsyncSessionScope:
-        return AsyncSessionScope(self, scope)
+    def session_scope(self, scope: Any = None, *, reuse_current: bool = True) -> AsyncSessionScope:
+        return AsyncSessionScope(self, scope, reuse_current=reuse_current)
+
+    def new_session(self) -> AsyncSessionScope:
+        """Create an independently managed session for a short transaction."""
+        return self.session_scope(reuse_current=False)
+
+    @asynccontextmanager
+    async def detached(self) -> AsyncIterator[None]:
+        """Temporarily hide the current session without managing its lifecycle."""
+        token = self._session_context.set(None)
+        try:
+            yield
+        finally:
+            self._session_context.reset(token)
 
     @asynccontextmanager
     async def session_generator(self) -> AsyncIterator[AsyncSession]:
