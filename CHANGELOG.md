@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2 - Unreleased
+## 0.1.2a1 - 2026-08-13
 
 - 提供同步和异步 SQLAlchemy 会话作用域。
 - 提供基于 `StorageAdapter` 的统一 `ModelRepository`。
