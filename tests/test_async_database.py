@@ -80,3 +80,39 @@ async def test_concurrent_new_sessions_are_distinct(async_db):
 
     assert len(sessions) == 2
     assert sessions[0] is not sessions[1]
+
+
+async def test_child_tasks_do_not_reuse_inherited_session(async_db):
+    child_sessions = []
+
+    async def use_scope():
+        with pytest.raises(RuntimeError):
+            _ = async_db.session
+        async with async_db as session:
+            child_sessions.append(session)
+            await asyncio.sleep(0)
+
+    async with async_db as parent:
+        await asyncio.gather(use_scope(), use_scope())
+        assert async_db.session is parent
+
+    assert len(child_sessions) == 2
+    assert child_sessions[0] is not child_sessions[1]
+    assert all(session is not parent for session in child_sessions)
+
+
+async def test_nested_scope_in_same_task_reuses_session(async_db):
+    async with async_db as parent, async_db as nested:
+        assert nested is parent
+
+
+async def test_reuse_session_explicitly_binds_existing_session(async_db):
+    async with async_db as parent:
+
+        async def use_parent():
+            async with async_db.reuse_session(parent) as reused:
+                assert reused is parent
+                assert async_db.session is parent
+
+        await asyncio.create_task(use_parent())
+        assert async_db.session is parent

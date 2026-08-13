@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - Unreleased
+## 0.1.2 - Unreleased
 
 - 提供同步和异步 SQLAlchemy 会话作用域。
 - 提供基于 `StorageAdapter` 的统一 `ModelRepository`。
@@ -14,4 +14,8 @@
 - ReadModel 普通读取按字段和 `validation_alias` 自动投影，并区分 `serialization_alias`。
 - 提供可编译到 SQLAlchemy、SQLModel 和 Elasticsearch 的结构化过滤 DSL，同时保留原生查询。
 - 增加结构化查询 DSL 的完整可运行示例。
-- 提供并发安全的会话作用域、ASGI 中间件和数据库驱动 extras。
+- 会话作用域在不同线程和 `asyncio.Task` 之间自动隔离，同时支持显式 `reuse_session()`、`new_session()` 和 `detached()`。
+- ASGI 中间件只管理 HTTP 请求，并在最终响应体发送后、后台任务运行前结束请求事务。
+- 更新和删除要求显式查询条件，更新字段、空更新对象及分页参数会被严格校验。
+- 增加 Windows/Linux CI、构建和发行元数据检查。
+- 提供数据库驱动 extras。

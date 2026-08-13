@@ -119,6 +119,12 @@ class SQLAlchemyAdapter:
         statement: Select[Any] | None = None,
         projection: Sequence[ReadField] | None = None,
     ) -> list[Any]:
+        if limit is not None and limit < 0:
+            raise ValueError("limit cannot be negative")
+        if offset is not None and offset < 0:
+            raise ValueError("offset cannot be negative")
+        if limit == 0:
+            return []
         stmt = statement if statement is not None else self.select(model)
         if query is not None:
             stmt = stmt.where(self._compile_query(model, query))
@@ -137,15 +143,22 @@ class SQLAlchemyAdapter:
         return await self.database.async_run(operation)
 
     async def update(self, model: type[Any], query: Any, values: Mapping[str, Any]) -> list[Any]:
+        if query is None:
+            raise ValueError("update requires an explicit query")
+        if not values:
+            raise ValueError("update values cannot be empty")
         mapper = self._mapper(model)
         mapped_fields = {attribute.key for attribute in mapper.column_attrs}
+        unknown_fields = set(values) - mapped_fields
+        if unknown_fields:
+            fields = ", ".join(sorted(unknown_fields))
+            raise ValueError(f"Unknown update field(s) for storage model {model.__name__}: {fields}")
 
         def operation(session: Session) -> list[Any]:
             objects = list(session.scalars(self.select(model).where(self._compile_query(model, query))).all())
             for obj in objects:
                 for key, value in values.items():
-                    if key in mapped_fields:
-                        setattr(obj, key, value)
+                    setattr(obj, key, value)
             session.flush()
             for obj in objects:
                 session.refresh(obj)
@@ -154,6 +167,9 @@ class SQLAlchemyAdapter:
         return await self.database.async_run(operation)
 
     async def remove(self, model: type[Any], query: Any) -> list[Any]:
+        if query is None:
+            raise ValueError("remove requires an explicit query")
+
         def operation(session: Session) -> list[Any]:
             objects = list(session.scalars(self.select(model).where(self._compile_query(model, query))).all())
             for obj in objects:

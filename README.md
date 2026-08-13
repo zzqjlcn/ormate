@@ -2,7 +2,7 @@
 
 ormate 是一个异步 Repository 工具包，用同一套 CRUD 接口访问 SQLAlchemy、SQLModel 和 Elasticsearch。Repository 负责输入输出模型转换，Adapter 负责具体的存储操作和查询语法。
 
-项目目前处于 `0.1.0` 阶段，API 在 `1.0` 前仍可能调整。
+项目目前处于 `0.1.x Alpha` 阶段，API 在 `1.0` 前仍可能调整。
 
 ## 安装
 
@@ -106,6 +106,15 @@ await repository.find(in_("id", []))       # 恒假，返回空列表
 await repository.find(not_in("id", []))   # 恒真，返回全部
 ```
 
+`update()` 和 `remove()` 要求显式查询条件，避免遗漏参数时意外修改或删除全部记录。确实需要匹配全部记录时使用 `and_()`：
+
+```python
+await repository.update(and_(), {"status": "archived"})
+await repository.remove(and_())
+```
+
+更新对象不能为空，未知更新字段会立即报错。`find()` 的 `limit` 和 `offset` 不能为负数，`limit=0` 固定返回空列表。
+
 `and_()` 恒真，`or_()` 恒假；相同类型的嵌套组合会自动展平。`and_`、`or_`、`not_` 只接受 ormate DSL 节点，不能在节点内部混入 SQLAlchemy 表达式或 ES 字典。需要后端特有能力时，将完整原生查询直接传给 Repository。
 
 完整可运行示例：
@@ -147,6 +156,44 @@ async with db:
 ```
 
 作用域正常退出时提交，发生异常时回滚。同步代码可以使用 `Database` 和 `with db:`。
+
+会话作用域按当前执行上下文自动隔离：同一个线程或 `asyncio.Task` 内的嵌套作用域复用当前 Session，新的 Task 即使继承了 ContextVar，也会自动创建独立 Session。因此可以直接在并发 worker 中使用普通作用域：
+
+```python
+async def worker(item):
+    async with db:
+        await tasks.add(item)
+
+
+await asyncio.gather(worker(item1), worker(item2))
+```
+
+每个 worker 都会独立提交或回滚。`new_session()` 用于在同一个 Task 内也强制开启独立短事务：
+
+```python
+async with db as parent:
+    async with db.new_session() as independent:
+        assert independent is not parent
+```
+
+`reuse_session(session)` 可以显式绑定一个已有 Session，ormate 不会提交或关闭它。跨 Task 复用同一个 `AsyncSession` 不受 SQLAlchemy 支持，除非调用者能够保证这些 Task 不会同时操作 Session，否则不应这样使用：
+
+```python
+async with db as session:
+    async with db.reuse_session(session):
+        # 同一 Task 内显式复用；生命周期仍由外层负责
+        await tasks.add({"title": "same transaction"})
+```
+
+手动创建并跨生命周期传递的后台任务可以使用 `detached()` 明确切断调用方 Session；后台任务中的并发 worker 随后会自动获得各自的 Session：
+
+```python
+async def run_background_job(job):
+    async with db.detached():
+        await process(job)
+```
+
+`detached()` 只临时隐藏并在退出时恢复当前 Session，不负责创建、提交或关闭 Session。
 
 相关示例：
 
@@ -249,7 +296,15 @@ app.add_middleware(
 )
 ```
 
-中间件接受 `AsyncDatabase` 或 `AsyncEngine`，为每个 HTTP/WebSocket 请求建立独立会话作用域。
+中间件接受 `AsyncDatabase` 或 `AsyncEngine`，只为 HTTP 请求建立会话作用域。请求 Session 会在最终响应体发送后提交或回滚并关闭，因此 Starlette/FastAPI `BackgroundTasks` 不会继续持有请求事务。WebSocket 应按每条消息或每次业务操作建立短事务：
+
+```python
+async for message in websocket.iter_text():
+    async with db:
+        await messages.add({"content": message})
+```
+
+手动创建、跨框架传递或延迟启动的后台任务仍可在入口使用 `detached()`。Starlette/FastAPI `BackgroundTasks` 由中间件在响应结束时自动完成隔离。
 
 ## 当前限制
 
@@ -260,7 +315,7 @@ app.add_middleware(
 
 ## 路线图
 
-`0.1.x` 用于完成首次 PyPI 发布，当前还需要经过 TestPyPI 安装验证。
+`0.1.x` 用于收敛 Alpha API，并持续通过 TestPyPI 安装验证发布产物。
 
 `0.2` 主要完善 Elasticsearch：PIT/search_after、索引 mapping 管理、并发冲突处理和真实集群测试。
 

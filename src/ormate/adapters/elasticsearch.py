@@ -178,6 +178,12 @@ class ElasticsearchAdapter:
         statement: Any = None,
         projection: Sequence[ReadField] | None = None,
     ) -> list[Any]:
+        if limit is not None and limit < 0:
+            raise ValueError("limit cannot be negative")
+        if offset is not None and offset < 0:
+            raise ValueError("offset cannot be negative")
+        if limit == 0:
+            return []
         if statement is not None and not isinstance(statement, Mapping):
             raise TypeError("Elasticsearch statement must be a search keyword mapping")
         search_options = dict(statement or {})
@@ -193,6 +199,14 @@ class ElasticsearchAdapter:
         return [self._from_hit(model, hit) for hit in response["hits"]["hits"]]
 
     async def update(self, model: type[Any], query: Any, values: Mapping[str, Any]) -> list[Any]:
+        if query is None:
+            raise ValueError("update requires an explicit query")
+        if not values:
+            raise ValueError("update values cannot be empty")
+        unknown_fields = set(values) - self._available_fields(model)
+        if unknown_fields:
+            fields = ", ".join(sorted(unknown_fields))
+            raise ValueError(f"Unknown update field(s) for storage model {model.__name__}: {fields}")
         documents = await self.find(model, query)
         index_name = self.storage_name(model)
         results = []
@@ -211,6 +225,8 @@ class ElasticsearchAdapter:
         return results
 
     async def remove(self, model: type[Any], query: Any) -> list[Any]:
+        if query is None:
+            raise ValueError("remove requires an explicit query")
         documents = await self.find(model, query)
         index_name = self.storage_name(model)
         for document in documents:

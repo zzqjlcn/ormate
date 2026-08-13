@@ -41,6 +41,18 @@ class ModelRepository[TableModel, ReadModel]:
         hook = getattr(self.read_model, "decode_from_storage", None)
         return dict(hook(dict(values))) if callable(hook) else values
 
+    @staticmethod
+    def _validate_pagination(limit: int | None, offset: int | None) -> None:
+        if limit is not None and limit < 0:
+            raise ValueError("limit cannot be negative")
+        if offset is not None and offset < 0:
+            raise ValueError("offset cannot be negative")
+
+    @staticmethod
+    def _require_query(query: Any, operation: str) -> None:
+        if query is None:
+            raise ValueError(f"{operation} requires an explicit query; use and_() to match all records")
+
     def _object_values(self, obj: TableModel | Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(obj, Mapping):
             return dict(obj)
@@ -81,6 +93,9 @@ class ModelRepository[TableModel, ReadModel]:
         offset: int | None = None,
         statement: Any = None,
     ) -> list[ReadModel | TableModel]:
+        self._validate_pagination(limit, offset)
+        if limit == 0:
+            return []
         objects = await self.adapter.find(
             self.model,
             query,
@@ -106,7 +121,10 @@ class ModelRepository[TableModel, ReadModel]:
         query: Any,
         item: Mapping[str, Any] | DumpableModel,
     ) -> list[ReadModel | TableModel]:
+        self._require_query(query, "update")
         values = self.encode_for_storage(self.to_dict(item))
+        if not values:
+            raise ValueError("update values cannot be empty")
         objects = await self.adapter.update(self.model, query, values)
         return [self.to_read_model(obj) for obj in objects]
 
@@ -128,6 +146,7 @@ class ModelRepository[TableModel, ReadModel]:
         return await self.update(self.adapter.primary_keys_query(self.model, primary_keys), item)
 
     async def remove(self, query: Any) -> list[ReadModel | TableModel]:
+        self._require_query(query, "remove")
         objects = await self.adapter.remove(self.model, query)
         return [self.to_read_model(obj) for obj in objects]
 

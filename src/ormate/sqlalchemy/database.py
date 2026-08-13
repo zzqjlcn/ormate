@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
+from threading import get_ident
 from typing import Any, TypeVar
 
 from sqlalchemy import URL, create_engine
@@ -22,6 +23,9 @@ class Database:
         session_options.setdefault("expire_on_commit", False)
         self.session_maker = sessionmaker(bind=engine, class_=Session, **session_options)
         self._session_context: ContextVar[Session | None] = ContextVar(f"ormate_sync_{id(self)}", default=None)
+        self._session_owner_context: ContextVar[int | None] = ContextVar(
+            f"ormate_sync_owner_{id(self)}", default=None
+        )
         self._scope_stack: ContextVar[tuple[SessionScope, ...]] = ContextVar(
             f"ormate_sync_scope_stack_{id(self)}", default=()
         )
@@ -39,9 +43,15 @@ class Database:
     @property
     def session(self) -> Session:
         session = self._session_context.get()
-        if session is None:
+        if session is None or not self._session_is_current():
             raise RuntimeError("No active database scope; use 'with db:' or 'with db.session_scope()'.")
         return session
+
+    def _session_is_current(self) -> bool:
+        return self._session_owner_context.get() == get_ident()
+
+    def _context_owner(self) -> int:
+        return get_ident()
 
     def __enter__(self) -> Session:
         scope = self.session_scope()
@@ -58,26 +68,32 @@ class Database:
         finally:
             self._scope_stack.set(stack[:-1])
 
-    def session_scope(self, scope: Any = None, *, reuse_current: bool = True) -> SessionScope:
-        return SessionScope(self, scope, reuse_current=reuse_current)
+    def session_scope(self) -> SessionScope:
+        return SessionScope(self)
 
     def new_session(self) -> SessionScope:
         """Create an independently managed session for a short transaction."""
-        return self.session_scope(reuse_current=False)
+        return SessionScope(self, reuse_current=False)
+
+    def reuse_session(self, session: Session) -> SessionScope:
+        """Explicitly bind an existing session without managing its lifecycle."""
+        return SessionScope(self, session=session)
 
     @contextmanager
     def detached(self) -> Iterator[None]:
         """Temporarily hide the current session without managing its lifecycle."""
-        token = self._session_context.set(None)
+        session_token = self._session_context.set(None)
+        owner_token = self._session_owner_context.set(None)
         try:
             yield
         finally:
-            self._session_context.reset(token)
+            self._session_owner_context.reset(owner_token)
+            self._session_context.reset(session_token)
 
     @contextmanager
     def session_generator(self) -> Iterator[Session]:
         current = self._session_context.get()
-        if current is not None:
+        if current is not None and self._session_is_current():
             yield current
             return
         with self.session_scope() as session:
@@ -112,6 +128,9 @@ class AsyncDatabase:
         session_options.setdefault("expire_on_commit", False)
         self.session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, **session_options)
         self._session_context: ContextVar[AsyncSession | None] = ContextVar(f"ormate_async_{id(self)}", default=None)
+        self._session_owner_context: ContextVar[asyncio.Task[Any] | None] = ContextVar(
+            f"ormate_async_owner_{id(self)}", default=None
+        )
         self._scope_stack: ContextVar[tuple[AsyncSessionScope, ...]] = ContextVar(
             f"ormate_async_scope_stack_{id(self)}", default=()
         )
@@ -125,9 +144,15 @@ class AsyncDatabase:
     @property
     def session(self) -> AsyncSession:
         session = self._session_context.get()
-        if session is None:
+        if session is None or not self._session_is_current():
             raise RuntimeError("No active database scope; use 'async with db'.")
         return session
+
+    def _session_is_current(self) -> bool:
+        return self._session_owner_context.get() is asyncio.current_task()
+
+    def _context_owner(self) -> asyncio.Task[Any] | None:
+        return asyncio.current_task()
 
     async def __aenter__(self) -> AsyncSession:
         scope = self.session_scope()
@@ -144,26 +169,32 @@ class AsyncDatabase:
         finally:
             self._scope_stack.set(stack[:-1])
 
-    def session_scope(self, scope: Any = None, *, reuse_current: bool = True) -> AsyncSessionScope:
-        return AsyncSessionScope(self, scope, reuse_current=reuse_current)
+    def session_scope(self) -> AsyncSessionScope:
+        return AsyncSessionScope(self)
 
     def new_session(self) -> AsyncSessionScope:
         """Create an independently managed session for a short transaction."""
-        return self.session_scope(reuse_current=False)
+        return AsyncSessionScope(self, reuse_current=False)
+
+    def reuse_session(self, session: AsyncSession) -> AsyncSessionScope:
+        """Explicitly bind an existing session without managing its lifecycle."""
+        return AsyncSessionScope(self, session=session)
 
     @asynccontextmanager
     async def detached(self) -> AsyncIterator[None]:
         """Temporarily hide the current session without managing its lifecycle."""
-        token = self._session_context.set(None)
+        session_token = self._session_context.set(None)
+        owner_token = self._session_owner_context.set(None)
         try:
             yield
         finally:
-            self._session_context.reset(token)
+            self._session_owner_context.reset(owner_token)
+            self._session_context.reset(session_token)
 
     @asynccontextmanager
     async def session_generator(self) -> AsyncIterator[AsyncSession]:
         current = self._session_context.get()
-        if current is not None:
+        if current is not None and self._session_is_current():
             yield current
             return
         async with self.session_scope() as session:

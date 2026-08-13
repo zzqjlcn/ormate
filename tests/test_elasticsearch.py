@@ -236,3 +236,6 @@ async def test_elasticsearch_projection_aliases_and_structured_query():
 
     with pytest.raises(ValueError, match="Unknown query field 'missing'.*KnowledgeDocument"):
         await repository.find(eq("missing", "value"))
+
+    with pytest.raises(ValueError, match="Unknown update field.*missing"):
+        await repository.update(and_(), {"missing": "value"})
