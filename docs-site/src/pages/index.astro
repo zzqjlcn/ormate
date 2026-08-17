@@ -1,0 +1,84 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const docs = await getCollection("docs");
+const orderedDocs = [...docs].sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout docs={docs} pageKind="home">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <img class="hero-emblem" src="/assets/ormate-logo.png" alt="" aria-hidden="true" />
+    <div class="hero-orbit orbit-one" aria-hidden="true"></div>
+    <div class="hero-orbit orbit-two" aria-hidden="true"></div>
+    <div class="hero-copy">
+      <p class="eyebrow">Python repository toolkit · 0.1.2</p>
+      <h1 id="hero-title">One repository.<br /><span>Every storage path.</span></h1>
+      <p class="hero-lede">用一套克制的异步 CRUD 接口连接 SQLAlchemy、SQLModel 与 Elasticsearch，同时保留每个后端的原生能力。</p>
+      <div class="hero-actions">
+        <a class="primary-action" href="/docs/quickstart/">开始使用 <span aria-hidden="true">→</span></a>
+        <button class="install-command" type="button" data-copy="pip install ormate">
+          <code>pip install ormate</code><span data-copy-label>复制</span>
+        </button>
+      </div>
+    </div>
+    <div class="hero-code" role="group" aria-label="ormate 基本示例">
+      <div class="code-caption"><span>repository.py</span><span class="live-indicator"><i></i> unified surface</span></div>
+      <pre><code><span class="code-muted"># one API, native models</span>
+<span class="code-keyword">db</span> = AsyncDatabase.create(
+    <span class="code-string">"sqlite+aiosqlite:///app.db"</span>
+)
+
+<span class="code-keyword">users</span> = ModelRepository(
+    SQLAlchemyAdapter(db), User, UserRead
+)
+
+created = <span class="code-keyword">await</span> users.add(&#123;
+    <span class="code-string">"id"</span>: <span class="code-number">1</span>, <span class="code-string">"name"</span>: <span class="code-string">"Ada"</span>
+&#125;)
+active = <span class="code-keyword">await</span> users.find(
+    eq(<span class="code-string">"active"</span>, <span class="code-number">True</span>)
+)</code></pre>
+    </div>
+    <div class="hero-footer" role="group" aria-label="支持的存储后端">
+      <span>SQLAlchemy 2</span><span>SQLModel</span><span>Elasticsearch 8/9</span><span>Python 3.13+</span>
+    </div>
+  </section>
+
+  <section class="principles" aria-label="设计原则">
+    <p class="section-index">01 / DESIGN</p>
+    <div class="principle-statement">
+      <h2>统一常用路径，<br />不隐藏后端能力。</h2>
+      <p>Repository 负责输入输出模型转换，Adapter 负责存储操作。常用 CRUD 使用一致接口，JOIN、全文评分和聚合仍可使用原生查询。</p>
+    </div>
+    <dl class="principle-list">
+      <div><dt>Typed</dt><dd>泛型 Repository 与完整类型标记</dd></div>
+      <div><dt>Explicit</dt><dd>更新、删除和事务边界保持明确</dd></div>
+      <div><dt>Pluggable</dt><dd>通过 StorageAdapter 接入其他存储</dd></div>
+    </dl>
+  </section>
+
+  <section class="docs-index" aria-labelledby="docs-index-title">
+    <div class="docs-index-heading">
+      <p class="section-index">02 / DOCUMENTATION</p>
+      <h2 id="docs-index-title">从模型到事务，<br />逐层理解 ormate。</h2>
+    </div>
+    <nav class="docs-index-list" aria-label="文档章节">
+      {orderedDocs.map((entry) => (
+        <a href={`/docs/${entry.id}/`}>
+          <span>{String(entry.data.order).padStart(2, "0")}</span>
+          <strong>{entry.data.title}</strong>
+          <p>{entry.data.description}</p>
+          <i aria-hidden="true">↗</i>
+        </a>
+      ))}
+    </nav>
+  </section>
+
+  <section class="final-cta" aria-labelledby="final-cta-title">
+    <p>READY TO BUILD</p>
+    <h2 id="final-cta-title">Keep the repository small.<br /><span>Keep your options open.</span></h2>
+    <div><a href="/docs/quickstart/">阅读快速开始</a><a href="https://github.com/zzqjlcn/ormate">查看源代码 ↗</a></div>
+  </section>
+</BaseLayout>

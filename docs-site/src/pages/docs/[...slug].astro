@@ -1,0 +1,70 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+export async function getStaticPaths() {
+  const docs = await getCollection("docs");
+  return docs.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+interface Props {
+  entry: CollectionEntry<"docs">;
+}
+
+const { entry } = Astro.props;
+const docs = await getCollection("docs");
+const orderedDocs = [...docs].sort((a, b) => a.data.order - b.data.order);
+const currentIndex = orderedDocs.findIndex((item) => item.id === entry.id);
+const previous = currentIndex > 0 ? orderedDocs[currentIndex - 1] : null;
+const next = currentIndex < orderedDocs.length - 1 ? orderedDocs[currentIndex + 1] : null;
+const { Content, headings } = await render(entry);
+---
+
+<BaseLayout
+  docs={docs}
+  pageKind="docs"
+  title={`${entry.data.title} — ormate`}
+  description={entry.data.description}
+>
+  <section class="docs-shell" aria-label="ormate 文档">
+    <aside class="docs-sidebar" data-sidebar aria-label="文档目录">
+      <div class="sidebar-inner">
+        <p class="sidebar-label">DOCUMENTATION</p>
+        <nav class="docs-nav" data-docs-nav aria-label="文档章节">
+          {orderedDocs.map((item) => (
+            <a href={`/docs/${item.id}/`} class:list={{ active: item.id === entry.id }}>
+              <span>{String(item.data.order).padStart(2, "0")}</span>{item.data.title}
+            </a>
+          ))}
+        </nav>
+        <div class="sidebar-meta">
+          <button type="button" data-theme-toggle><span data-theme-label>深色阅读</span><i aria-hidden="true"></i></button>
+          <a href="https://github.com/zzqjlcn/ormate/issues">报告问题 <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </aside>
+
+    <article class="docs-content">
+      <section class="doc-section markdown-doc" aria-labelledby="page-title">
+        <header class="section-heading">
+          <p class="section-kicker">{String(entry.data.order).padStart(2, "0")} · {entry.data.kicker}</p>
+          <h1 id="page-title">{entry.data.title}</h1>
+          <p>{entry.data.description}</p>
+        </header>
+        <div class="markdown-body"><Content /></div>
+      </section>
+      <nav class="page-navigation" aria-label="相邻文档">
+        {previous ? <a href={`/docs/${previous.id}/`}><span>上一篇</span><strong>← {previous.data.title}</strong></a> : <span></span>}
+        {next ? <a href={`/docs/${next.id}/`}><span>下一篇</span><strong>{next.data.title} →</strong></a> : <span></span>}
+      </nav>
+    </article>
+
+    <aside class="page-toc" aria-label="本页目录">
+      <p>ON THIS PAGE</p>
+      <nav aria-label="当前页面章节">
+        {headings.filter((heading) => heading.depth <= 3).map((heading) => <a href={`#${heading.slug}`}>{heading.text}</a>)}
+      </nav>
+      <a href="#main-content">返回顶部 ↑</a>
+    </aside>
+  </section>
+</BaseLayout>
