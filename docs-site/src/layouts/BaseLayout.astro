@@ -1,0 +1,105 @@
+---
+import "../styles/global.css";
+
+interface DocEntry {
+  id: string;
+  data: {
+    title: string;
+    description: string;
+    kicker: string;
+    order: number;
+  };
+}
+
+interface Props {
+  title?: string;
+  description?: string;
+  docs: DocEntry[];
+  pageKind?: "home" | "docs";
+}
+
+const {
+  title = "ormate — Documentation",
+  description = "ormate 0.1.2 官方文档：使用统一 Repository API 访问 SQLAlchemy、SQLModel 与 Elasticsearch。",
+  docs,
+  pageKind = "docs",
+} = Astro.props;
+
+const orderedDocs = [...docs].sort((a, b) => a.data.order - b.data.order);
+const searchIndex = orderedDocs.map((entry) => ({
+  title: entry.data.title,
+  description: entry.data.description,
+  kicker: entry.data.kicker,
+  url: `/docs/${entry.id}/`,
+}));
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#101210" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <title>{title}</title>
+    <link rel="icon" type="image/png" href="/assets/ormate-logo.png" />
+  </head>
+  <body class:list={[`${pageKind}-page`]}>
+    <a class="skip-link" href="#main-content">跳到正文</a>
+
+    <header class:list={["site-header", { scrolled: pageKind === "docs" }]} data-header>
+      <a class="wordmark" href="/" aria-label="ormate 首页">
+        <img src="/assets/ormate-logo.png" alt="" width="34" height="34" />
+        <span>ormate</span>
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/docs/quickstart/">快速开始</a>
+        <a href="/docs/repository/">API</a>
+        <a href="/docs/transactions/">事务</a>
+      </nav>
+      <div class="header-actions">
+        <button class="search-trigger" type="button" data-search-open aria-label="搜索文档">
+          <span>搜索</span><kbd>/</kbd>
+        </button>
+        <a class="version-link" href="https://pypi.org/project/ormate/0.1.2/">v0.1.2</a>
+        <a class="github-link" href="https://github.com/zzqjlcn/ormate" aria-label="GitHub 仓库">GitHub <span aria-hidden="true">↗</span></a>
+        {pageKind === "docs" && (
+          <button class="menu-toggle" type="button" data-menu-toggle aria-label="打开文档目录" aria-expanded="false">
+            <span></span><span></span>
+          </button>
+        )}
+      </div>
+    </header>
+
+    <main id="main-content">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <a class="wordmark" href="/"><img src="/assets/ormate-logo.png" alt="" width="30" height="30" /><span>ormate</span></a>
+      <p>MIT License · Built for explicit storage boundaries.</p>
+      <div><a href="https://pypi.org/project/ormate/">PyPI</a><a href="https://github.com/zzqjlcn/ormate">GitHub</a></div>
+    </footer>
+
+    <dialog class="search-dialog" data-search-dialog aria-labelledby="search-title">
+      <div class="search-panel">
+        <div class="search-field">
+          <span aria-hidden="true">⌕</span>
+          <label class="sr-only" id="search-title" for="docs-search">搜索文档</label>
+          <input id="docs-search" data-search-input type="search" placeholder="搜索 API、事务、Elasticsearch…" autocomplete="off" />
+          <kbd>ESC</kbd>
+        </div>
+        <div class="search-results" data-search-results><p>输入关键词开始搜索文档。</p></div>
+        <div class="search-footer"><span>↑↓ 选择</span><span>Enter 打开</span></div>
+      </div>
+    </dialog>
+
+    <div class="toast" data-toast role="status" aria-live="polite">已复制到剪贴板</div>
+    <div class="scroll-progress" data-scroll-progress aria-hidden="true"></div>
+    <script is:inline id="search-index" type="application/json" set:html={JSON.stringify(searchIndex)} />
+    <script is:inline src="/app.js"></script>
+  </body>
+</html>
