@@ -39,7 +39,7 @@ document.querySelectorAll("[data-copy]").forEach((button) => {
 });
 
 document.querySelectorAll("pre").forEach((block) => {
-  if (block.closest(".hero-code")) return;
+  if (block.closest(".contract")) return;
   const wrapper = document.createElement("div");
   wrapper.className = "generated-code-block";
   block.before(wrapper);
@@ -72,7 +72,7 @@ menuToggle?.addEventListener("click", () => {
   const open = document.body.classList.toggle("menu-open");
   menuToggle.setAttribute("aria-expanded", String(open));
 });
-document.querySelectorAll("[data-docs-nav] a").forEach((link) => link.addEventListener("click", closeMenu));
+document.querySelectorAll("[data-sidebar] a").forEach((link) => link.addEventListener("click", closeMenu));
 
 const themeToggle = document.querySelector("[data-theme-toggle]");
 const themeLabel = document.querySelector("[data-theme-label]");
@@ -178,5 +178,5 @@ if (window.matchMedia("(prefers-reduced-motion: no-preference)").matches) {
     },
     { threshold: 0.08 },
   );
-  document.querySelectorAll(".doc-section > *, .docs-index-list > a").forEach((element) => revealObserver.observe(element));
+  document.querySelectorAll(".manifesto, .features > div, .docs-listing, .closing").forEach((element) => revealObserver.observe(element));
 }
