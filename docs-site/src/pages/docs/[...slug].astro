@@ -7,9 +7,7 @@ export async function getStaticPaths() {
   return docs.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
 }
 
-interface Props {
-  entry: CollectionEntry<"docs">;
-}
+interface Props { entry: CollectionEntry<"docs"> }
 
 const { entry } = Astro.props;
 const docs = await getCollection("docs");
@@ -18,53 +16,43 @@ const currentIndex = orderedDocs.findIndex((item) => item.id === entry.id);
 const previous = currentIndex > 0 ? orderedDocs[currentIndex - 1] : null;
 const next = currentIndex < orderedDocs.length - 1 ? orderedDocs[currentIndex + 1] : null;
 const { Content, headings } = await render(entry);
+const groups = [
+  { title: "开始", docs: orderedDocs.filter((item) => item.data.order <= 2) },
+  { title: "核心", docs: orderedDocs.filter((item) => item.data.order >= 3 && item.data.order <= 6) },
+  { title: "集成", docs: orderedDocs.filter((item) => item.data.order >= 7 && item.data.order <= 10) },
+  { title: "状态", docs: orderedDocs.filter((item) => item.data.order === 11) },
+];
 ---
 
-<BaseLayout
-  docs={docs}
-  pageKind="docs"
-  title={`${entry.data.title} — ormate`}
-  description={entry.data.description}
->
-  <section class="docs-shell" aria-label="ormate 文档">
-    <aside class="docs-sidebar" data-sidebar aria-label="文档目录">
-      <div class="sidebar-inner">
-        <p class="sidebar-label">DOCUMENTATION</p>
-        <nav class="docs-nav" data-docs-nav aria-label="文档章节">
-          {orderedDocs.map((item) => (
-            <a href={`/docs/${item.id}/`} class:list={{ active: item.id === entry.id }}>
-              <span>{String(item.data.order).padStart(2, "0")}</span>{item.data.title}
-            </a>
-          ))}
-        </nav>
-        <div class="sidebar-meta">
-          <button type="button" data-theme-toggle><span data-theme-label>深色阅读</span><i aria-hidden="true"></i></button>
-          <a href="https://github.com/zzqjlcn/ormate/issues">报告问题 <span aria-hidden="true">↗</span></a>
-        </div>
-      </div>
+<BaseLayout docs={docs} pageKind="docs" title={`${entry.data.title} · ormate`} description={entry.data.description}>
+  <div class="docs-shell">
+    <aside class="sidebar" data-sidebar aria-label="文档目录">
+      <div class="version">文档 <span>v0.1.2</span></div>
+      {groups.map((group) => (
+        <section>
+          <h2>{group.title}</h2>
+          {group.docs.map((item) => <a class:list={{ active: item.id === entry.id }} href={`/docs/${item.id}/`}>{item.id === entry.id && <span aria-hidden="true">—</span>}{item.data.title}</a>)}
+        </section>
+      ))}
     </aside>
 
-    <article class="docs-content">
-      <section class="doc-section markdown-doc" aria-labelledby="page-title">
-        <header class="section-heading">
-          <p class="section-kicker">{String(entry.data.order).padStart(2, "0")} · {entry.data.kicker}</p>
-          <h1 id="page-title">{entry.data.title}</h1>
-          <p>{entry.data.description}</p>
-        </header>
-        <div class="markdown-body"><Content /></div>
-      </section>
+    <main class="doc-main">
+      <div class="eyebrow">{entry.data.kicker}</div>
+      <article class="prose">
+        <h1>{entry.data.title}</h1>
+        <p>{entry.data.description}</p>
+        <Content />
+      </article>
       <nav class="page-navigation" aria-label="相邻文档">
         {previous ? <a href={`/docs/${previous.id}/`}><span>上一篇</span><strong>← {previous.data.title}</strong></a> : <span></span>}
         {next ? <a href={`/docs/${next.id}/`}><span>下一篇</span><strong>{next.data.title} →</strong></a> : <span></span>}
       </nav>
-    </article>
+      <footer class="doc-footer"><span>ormate · MIT License</span><a href="/">返回首页 ↑</a></footer>
+    </main>
 
-    <aside class="page-toc" aria-label="本页目录">
-      <p>ON THIS PAGE</p>
-      <nav aria-label="当前页面章节">
-        {headings.filter((heading) => heading.depth <= 3).map((heading) => <a href={`#${heading.slug}`}>{heading.text}</a>)}
-      </nav>
-      <a href="#main-content">返回顶部 ↑</a>
+    <aside class="toc" aria-label="本页目录">
+      <strong>本页内容</strong>
+      <nav>{headings.filter((heading) => heading.depth <= 3).map((heading) => <a href={`#${heading.slug}`}>{heading.text}</a>)}</nav>
     </aside>
-  </section>
+  </div>
 </BaseLayout>

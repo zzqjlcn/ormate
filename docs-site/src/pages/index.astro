@@ -3,82 +3,69 @@ import { getCollection } from "astro:content";
 import BaseLayout from "../layouts/BaseLayout.astro";
 
 const docs = await getCollection("docs");
-const orderedDocs = [...docs].sort((a, b) => a.data.order - b.data.order);
 ---
 
 <BaseLayout docs={docs} pageKind="home">
-  <section class="hero" aria-labelledby="hero-title">
-    <div class="hero-grid" aria-hidden="true"></div>
-    <img class="hero-emblem" src="/assets/ormate-logo.png" alt="" aria-hidden="true" />
-    <div class="hero-orbit orbit-one" aria-hidden="true"></div>
-    <div class="hero-orbit orbit-two" aria-hidden="true"></div>
+  <section class="hero">
+    <div class="grid-glow" aria-hidden="true"></div>
     <div class="hero-copy">
-      <p class="eyebrow">Python repository toolkit · 0.1.2</p>
-      <h1 id="hero-title">One repository.<br /><span>Every storage path.</span></h1>
-      <p class="hero-lede">用一套克制的异步 CRUD 接口连接 SQLAlchemy、SQLModel 与 Elasticsearch，同时保留每个后端的原生能力。</p>
+      <div class="signal"><i></i> Python 3.13+ · v0.1.2</div>
+      <h1>一套仓储，<br /><span>连接存储。</span></h1>
+      <p>用一致的 Repository 接口连接 SQLAlchemy、SQLModel 与 Elasticsearch，同时保留每个后端的原生能力。</p>
       <div class="hero-actions">
-        <a class="primary-action" href="/docs/quickstart/">开始使用 <span aria-hidden="true">→</span></a>
-        <button class="install-command" type="button" data-copy="pip install ormate">
-          <code>pip install ormate</code><span data-copy-label>复制</span>
-        </button>
+        <a class="primary" href="/docs/quickstart/">阅读文档 <span>→</span></a>
+        <button class="install" type="button" data-copy="pip install ormate"><code>pip install ormate</code><span data-copy-label>复制</span></button>
       </div>
     </div>
-    <div class="hero-code" role="group" aria-label="ormate 基本示例">
-      <div class="code-caption"><span>repository.py</span><span class="live-indicator"><i></i> unified surface</span></div>
-      <pre><code><span class="code-muted"># one API, native models</span>
-<span class="code-keyword">db</span> = AsyncDatabase.create(
-    <span class="code-string">"sqlite+aiosqlite:///app.db"</span>
+    <div class="contract" aria-label="从统一仓储到多种存储的流程">
+      <div class="contract-head"><span>repository.py</span><i></i><i></i><i></i></div>
+      <pre><span class="purple">users</span> = <span class="blue">ModelRepository</span>(
+    SQLAlchemyAdapter(db),
+    <span class="gold">User</span>, <span class="gold">UserRead</span>,
 )
 
-<span class="code-keyword">users</span> = ModelRepository(
-    SQLAlchemyAdapter(db), User, UserRead
-)
-
-created = <span class="code-keyword">await</span> users.add(&#123;
-    <span class="code-string">"id"</span>: <span class="code-number">1</span>, <span class="code-string">"name"</span>: <span class="code-string">"Ada"</span>
-&#125;)
-active = <span class="code-keyword">await</span> users.find(
-    eq(<span class="code-string">"active"</span>, <span class="code-number">True</span>)
-)</code></pre>
-    </div>
-    <div class="hero-footer" role="group" aria-label="支持的存储后端">
-      <span>SQLAlchemy 2</span><span>SQLModel</span><span>Elasticsearch 8/9</span><span>Python 3.13+</span>
+active = <span class="purple">await</span> users.find(
+    <span class="blue">eq</span>(<span class="green">"active"</span>, <span class="gold">True</span>)
+)</pre>
+      <div class="runtime-flow"><span>MODEL</span><b></b><span>REPOSITORY</span><b></b><span>ADAPTER</span><b></b><span>STORE</span></div>
+      <div class="pulse p1"></div><div class="pulse p2"></div>
     </div>
   </section>
 
-  <section class="principles" aria-label="设计原则">
-    <p class="section-index">01 / DESIGN</p>
-    <div class="principle-statement">
-      <h2>统一常用路径，<br />不隐藏后端能力。</h2>
-      <p>Repository 负责输入输出模型转换，Adapter 负责存储操作。常用 CRUD 使用一致接口，JOIN、全文评分和聚合仍可使用原生查询。</p>
-    </div>
-    <dl class="principle-list">
-      <div><dt>Typed</dt><dd>泛型 Repository 与完整类型标记</dd></div>
-      <div><dt>Explicit</dt><dd>更新、删除和事务边界保持明确</dd></div>
-      <div><dt>Pluggable</dt><dd>通过 StorageAdapter 接入其他存储</dd></div>
-    </dl>
+  <section class="manifesto">
+    <div class="section-label">01 / ONE REPOSITORY</div>
+    <h2>统一常用路径。<br />保留后端能力。</h2>
+    <p>Repository 负责输入输出转换，Adapter 负责存储操作。业务代码获得稳定接口，复杂查询仍然可以回到原生能力。</p>
   </section>
 
-  <section class="docs-index" aria-labelledby="docs-index-title">
-    <div class="docs-index-heading">
-      <p class="section-index">02 / DOCUMENTATION</p>
-      <h2 id="docs-index-title">从模型到事务，<br />逐层理解 ormate。</h2>
-    </div>
-    <nav class="docs-index-list" aria-label="文档章节">
-      {orderedDocs.map((entry) => (
+  <section class="features">
+    <div><span>01</span><h3>统一仓储语义</h3><p>创建、查询、更新、删除与统计使用同一套紧凑的异步接口。</p></div>
+    <div><span>02</span><h3>类型贯穿全程</h3><p>Pydantic ReadModel 驱动字段投影、验证与最终返回类型。</p></div>
+    <div><span>03</span><h3>存储自由切换</h3><p>SQLAlchemy、SQLModel 和 Elasticsearch 共享 DSL，也支持原生查询。</p></div>
+  </section>
+
+  <section class="docs-listing" aria-labelledby="docs-title">
+    <div class="section-label">02 / DOCUMENTATION</div>
+    <h2 id="docs-title">从模型到事务，<br />逐层理解 ormate。</h2>
+    <nav aria-label="文档章节">
+      {[...docs].sort((a, b) => a.data.order - b.data.order).map((entry) => (
         <a href={`/docs/${entry.id}/`}>
           <span>{String(entry.data.order).padStart(2, "0")}</span>
           <strong>{entry.data.title}</strong>
-          <p>{entry.data.description}</p>
-          <i aria-hidden="true">↗</i>
+          <i>↗</i>
         </a>
       ))}
     </nav>
   </section>
 
-  <section class="final-cta" aria-labelledby="final-cta-title">
-    <p>READY TO BUILD</p>
-    <h2 id="final-cta-title">Keep the repository small.<br /><span>Keep your options open.</span></h2>
-    <div><a href="/docs/quickstart/">阅读快速开始</a><a href="https://github.com/zzqjlcn/ormate">查看源代码 ↗</a></div>
+  <section class="closing">
+    <div class="section-label">READY WHEN YOU ARE</div>
+    <h2>更少适配代码。<br />更清晰的边界。</h2>
+    <a href="/docs/quickstart/">五分钟开始使用 <span>↗</span></a>
   </section>
+
+  <footer class="home-footer">
+    <a class="brand" href="/"><img src="/assets/ormate-logo.png" alt="" width="28" height="28" /><span>ormate</span></a>
+    <span>Unified repositories for Python.</span><span>MIT · 2026</span>
+  </footer>
 </BaseLayout>
